@@ -127,6 +127,24 @@ services:
     networks:
       - poc-network
 
+  frontend:
+    build:
+      context: ./frontend
+    container_name: poc-frontend
+    restart: unless-stopped
+    depends_on:
+      - ms-contas
+      - ms-transacoes
+      - ms-auditoria
+    environment:
+      VITE_API_CONTAS: http://localhost:8080
+      VITE_API_TRANSACOES: http://localhost:5000
+      VITE_API_AUDITORIA: http://localhost:5001
+    ports:
+      - "3000:3000"
+    networks:
+      - poc-network
+
 networks:
   poc-network:
     driver: bridge
