@@ -106,6 +106,27 @@ services:
     networks:
       - poc-network
 
+  ms-auditoria:
+    build:
+      context: ./ms-auditoria
+    container_name: poc-ms-auditoria
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      Elasticsearch__Url: http://elasticsearch:9200
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__User: guest
+      RabbitMQ__Password: guest
+    ports:
+      - "5001:5001"
+    networks:
+      - poc-network
+
 networks:
   poc-network:
     driver: bridge

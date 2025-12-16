@@ -4,8 +4,8 @@
 
 Este documento lista todas as tarefas necessárias para implementar a POC de auditoria de transações bancárias, conforme definido no PRD e Tech Spec.
 
-**Estimativa Total:** 9-10 dias  
-**Quantidade de Tarefas:** 6 tarefas principais, 32 subtarefas
+**Estimativa Total:** 10-11 dias  
+**Quantidade de Tarefas:** 7 tarefas principais, 45 subtarefas
 
 ---
 
@@ -45,6 +45,12 @@ Este documento lista todas as tarefas necessárias para implementar a POC de aud
 ┌───────────────────────────────────┐
 │   6.0 Integração & Documentação   │
 └───────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────┐
+│  7.0 Persistência Local Auditoria │
+│  (tabela audit_log por schema)    │
+└───────────────────────────────────┘
 ```
 
 ---
@@ -77,6 +83,7 @@ O MS-Transações (3.0) depende do MS-Contas (2.0) estar pronto para integraçã
 - [ ] 4.0 MS-Auditoria (.NET 8)
 - [ ] 5.0 Frontend (React + Tailwind)
 - [ ] 6.0 Integração Final e Documentação
+- [ ] 7.0 Persistência Local de Auditoria (tabela audit_log por schema)
 
 ---
 
@@ -104,6 +111,11 @@ O MS-Transações (3.0) depende do MS-Contas (2.0) estar pronto para integraçã
 |--------|-----------|---------------|
 | 6.0 | Docker final + README | ❌ Final |
 
+### Fase 5: Persistência Local (1 dia)
+| Tarefa | Descrição | Paralelizável |
+|--------|-----------|---------------|
+| 7.0 | Tabela audit_log + modificação interceptores | ⚠️ Após 2.0 e 3.0 |
+
 ---
 
 ## Arquivos de Tarefas
@@ -114,6 +126,7 @@ O MS-Transações (3.0) depende do MS-Contas (2.0) estar pronto para integraçã
 - [4_task.md](4_task.md) - MS-Auditoria (.NET)
 - [5_task.md](5_task.md) - Frontend (React)
 - [6_task.md](6_task.md) - Integração Final
+- [7_task.md](7_task.md) - Persistência Local de Auditoria
 
 ---
 
