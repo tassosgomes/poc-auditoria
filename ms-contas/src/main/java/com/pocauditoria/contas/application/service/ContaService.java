@@ -3,6 +3,7 @@ package com.pocauditoria.contas.application.service;
 import com.pocauditoria.contas.application.dto.ContaCreateRequest;
 import com.pocauditoria.contas.application.dto.ContaResponse;
 import com.pocauditoria.contas.application.dto.ContaSaldoUpdateRequest;
+import com.pocauditoria.contas.application.dto.ContaTransferenciaRequest;
 import com.pocauditoria.contas.application.dto.ContaUpdateRequest;
 import com.pocauditoria.contas.domain.entity.Conta;
 import com.pocauditoria.contas.domain.repository.ContaRepository;
@@ -86,6 +87,29 @@ public class ContaService {
         conta.setSaldo(request.saldo());
         var saved = contaRepository.save(conta);
         return toResponse(saved);
+    }
+
+    @Transactional
+    public void transferir(ContaTransferenciaRequest request) {
+        if (request.contaOrigemId().equals(request.contaDestinoId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conta origem e destino devem ser diferentes");
+        }
+
+        var contaOrigem = contaRepository.findById(request.contaOrigemId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conta origem não encontrada"));
+
+        var contaDestino = contaRepository.findById(request.contaDestinoId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conta destino não encontrada"));
+
+        if (contaOrigem.getSaldo().compareTo(request.valor()) < 0) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Saldo insuficiente");
+        }
+
+        contaOrigem.setSaldo(contaOrigem.getSaldo().subtract(request.valor()));
+        contaDestino.setSaldo(contaDestino.getSaldo().add(request.valor()));
+
+        contaRepository.save(contaOrigem);
+        contaRepository.save(contaDestino);
     }
 
     @Transactional

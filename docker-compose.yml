@@ -81,6 +81,31 @@ services:
     networks:
       - poc-network
 
+  ms-transacoes:
+    build:
+      context: ./ms-transacoes
+    container_name: poc-ms-transacoes
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ms-contas:
+        condition: service_started
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=postgres;Database=poc_auditoria;Username=poc_user;Password=poc_password;SearchPath=transacoes"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__User: guest
+      RabbitMQ__Password: guest
+      Services__MsContas: http://ms-contas:8080
+      Services__MsContasAuth__User: admin
+      Services__MsContasAuth__Password: admin123
+    ports:
+      - "5000:5000"
+    networks:
+      - poc-network
+
 networks:
   poc-network:
     driver: bridge

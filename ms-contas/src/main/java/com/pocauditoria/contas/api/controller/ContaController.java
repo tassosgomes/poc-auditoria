@@ -3,6 +3,7 @@ package com.pocauditoria.contas.api.controller;
 import com.pocauditoria.contas.application.dto.ContaCreateRequest;
 import com.pocauditoria.contas.application.dto.ContaResponse;
 import com.pocauditoria.contas.application.dto.ContaSaldoUpdateRequest;
+import com.pocauditoria.contas.application.dto.ContaTransferenciaRequest;
 import com.pocauditoria.contas.application.dto.ContaUpdateRequest;
 import com.pocauditoria.contas.application.service.ContaService;
 import jakarta.validation.Valid;
@@ -64,6 +65,12 @@ public class ContaController {
             @Valid @RequestBody ContaSaldoUpdateRequest request
     ) {
         return ResponseEntity.ok(contaService.atualizarSaldo(id, request));
+    }
+
+    @PostMapping("/transferencia")
+    public ResponseEntity<Void> transferir(@Valid @RequestBody ContaTransferenciaRequest request) {
+        contaService.transferir(request);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")

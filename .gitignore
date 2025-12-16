@@ -1,0 +1,9 @@
+# .NET
+**/bin/
+**/obj/
+
+# Java / Maven
+**/target/
+
+# OS / tooling
+.DS_Store
