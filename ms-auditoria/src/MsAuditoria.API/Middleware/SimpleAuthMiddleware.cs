@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text;
-using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 
 namespace MsAuditoria.API.Middleware;
 
@@ -84,14 +84,18 @@ public sealed class SimpleAuthMiddleware
     {
         context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
         context.Response.ContentType = "application/json";
+        context.Response.Headers.WWWAuthenticate = "Basic realm=\"ms-auditoria\"";
 
-        var problem = new
+        var problem = new ProblemDetails
         {
-            type = "https://tools.ietf.org/html/rfc9110#section-15.5.2",
-            title = "Unauthorized",
-            status = 401,
-            detail
+            Type = "about:blank",
+            Title = "Unauthorized",
+            Status = StatusCodes.Status401Unauthorized,
+            Detail = detail,
+            Instance = context.Request.Path
         };
+
+        problem.Extensions["traceId"] = context.TraceIdentifier;
 
         await context.Response.WriteAsJsonAsync(problem);
     }

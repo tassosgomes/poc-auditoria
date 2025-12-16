@@ -24,6 +24,7 @@ public class AuditEventConsumer : BackgroundService
     private IModel? _channel;
 
     private const string QueueName = "audit-queue";
+    private const string ErrorQueueName = "audit-error-queue";
     private const string ExchangeName = "audit-events";
     private const string RoutingKey = "audit";
     private const string ErrorRoutingKey = "audit.error";
@@ -53,15 +54,14 @@ public class AuditEventConsumer : BackgroundService
 
         try
         {
-            // Aguardar fila ser criada pelos produtores
-            await WaitForQueueAsync(stoppingToken);
+            EnsureTopology();
 
             // Configurar prefetch para processar uma mensagem por vez
             _channel.BasicQos(prefetchSize: 0, prefetchCount: 1, global: false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao configurar fila RabbitMQ");
+            _logger.LogError(ex, "Erro ao declarar topologia RabbitMQ");
             return;
         }
 
@@ -99,7 +99,8 @@ public class AuditEventConsumer : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro ao processar evento de auditoria: {Message}", message);
-                // Rejeitar e não reprocessar (enviaria para DLQ se configurada)
+                // Rejeitar e não reprocessar. Como a fila tem DLX configurado,
+                // a mensagem vai para a audit-error-queue.
                 _channel.BasicNack(ea.DeliveryTag, multiple: false, requeue: false);
             }
         };
@@ -153,38 +154,55 @@ public class AuditEventConsumer : BackgroundService
         _logger.LogError("RabbitMQ não ficou disponível após {MaxRetries} tentativas", maxRetries);
     }
 
-    private async Task WaitForQueueAsync(CancellationToken cancellationToken)
+    private void EnsureTopology()
     {
-        var maxRetries = 60;
-        var retryCount = 0;
-
-        while (retryCount < maxRetries && !cancellationToken.IsCancellationRequested)
+        if (_channel == null)
         {
-            try
-            {
-                // Passive declare apenas verifica se a fila existe
-                _channel!.QueueDeclarePassive(QueueName);
-                _logger.LogInformation("Fila {QueueName} encontrada", QueueName);
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Fila {QueueName} ainda não existe: {Message}", QueueName, ex.Message);
-                
-                // Reconectar pois o canal é fechado após erro
-                try
-                {
-                    _channel?.Dispose();
-                    _channel = _connection!.CreateModel();
-                }
-                catch { }
-
-                retryCount++;
-                await Task.Delay(2000, cancellationToken);
-            }
+            throw new InvalidOperationException("RabbitMQ channel not initialized");
         }
 
-        throw new Exception($"Fila {QueueName} não foi criada após {maxRetries} tentativas");
+        _channel.ExchangeDeclare(
+            exchange: ExchangeName,
+            type: ExchangeType.Direct,
+            durable: true,
+            autoDelete: false,
+            arguments: null);
+
+        _channel.QueueDeclare(
+            queue: ErrorQueueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: null);
+
+        _channel.QueueBind(
+            queue: ErrorQueueName,
+            exchange: ExchangeName,
+            routingKey: ErrorRoutingKey);
+
+        var mainQueueArgs = new Dictionary<string, object>
+        {
+            ["x-dead-letter-exchange"] = ExchangeName,
+            ["x-dead-letter-routing-key"] = ErrorRoutingKey
+        };
+
+        _channel.QueueDeclare(
+            queue: QueueName,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: mainQueueArgs);
+
+        _channel.QueueBind(
+            queue: QueueName,
+            exchange: ExchangeName,
+            routingKey: RoutingKey);
+
+        _logger.LogInformation(
+            "Topologia RabbitMQ garantida: exchange={Exchange} queue={Queue} dlq={Dlq}",
+            ExchangeName,
+            QueueName,
+            ErrorQueueName);
     }
 
     public override void Dispose()

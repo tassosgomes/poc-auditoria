@@ -55,7 +55,14 @@ public class AuditController : ControllerBase
 
         if (auditEvent == null)
         {
-            return NotFound(new { message = $"Evento de auditoria com ID '{id}' não encontrado" });
+            return NotFound(new ProblemDetails
+            {
+                Type = "about:blank",
+                Title = "Not Found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"Evento de auditoria com ID '{id}' não encontrado",
+                Instance = HttpContext.Request.Path
+            });
         }
 
         return Ok(auditEvent);

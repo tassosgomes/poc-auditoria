@@ -17,6 +17,7 @@ public class ElasticsearchService : IElasticsearchService
 {
     private readonly ElasticsearchClient _client;
     private readonly ILogger<ElasticsearchService> _logger;
+    private readonly int _maxResults;
 
     public ElasticsearchService(
         IConfiguration config,
@@ -32,13 +33,21 @@ public class ElasticsearchService : IElasticsearchService
             .RequestTimeout(TimeSpan.FromSeconds(30));
 
         _client = new ElasticsearchClient(settings);
+
+        _maxResults = int.TryParse(config["Elasticsearch:MaxResults"], out var maxResults)
+            ? maxResults
+            : 1000;
     }
 
     /// <inheritdoc />
     public async Task IndexEventAsync(AuditEventDTO auditEvent)
     {
         // Determinar índice baseado no serviço de origem
-        var indexName = $"audit-{auditEvent.SourceService.ToLowerInvariant().Replace("_", "-")}";
+        var sourceService = string.IsNullOrWhiteSpace(auditEvent.SourceService)
+            ? "unknown"
+            : auditEvent.SourceService;
+
+        var indexName = $"audit-{sourceService.ToLowerInvariant().Replace("_", "-")}";
 
         var response = await _client.IndexAsync(auditEvent, idx => idx
             .Index(indexName)
@@ -65,16 +74,16 @@ public class ElasticsearchService : IElasticsearchService
             searchResponse = await _client.SearchAsync<AuditEventDTO>(s => s
                 .Index("audit-*")
                 .Query(q => q.Bool(b => b.Must(mustClauses.ToArray())))
-                .Sort(sort => sort.Field("timestamp", new FieldSort { Order = SortOrder.Desc }))
-                .Size(1000));
+                .Sort(sort => sort.Field(f => f.Timestamp, new FieldSort { Order = SortOrder.Desc }))
+                .Size(_maxResults));
         }
         else
         {
             searchResponse = await _client.SearchAsync<AuditEventDTO>(s => s
                 .Index("audit-*")
                 .Query(q => q.MatchAll(new MatchAllQuery()))
-                .Sort(sort => sort.Field("timestamp", new FieldSort { Order = SortOrder.Desc }))
-                .Size(1000));
+                .Sort(sort => sort.Field(f => f.Timestamp, new FieldSort { Order = SortOrder.Desc }))
+                .Size(_maxResults));
         }
 
         if (!searchResponse.IsValidResponse)
@@ -91,7 +100,7 @@ public class ElasticsearchService : IElasticsearchService
     {
         var searchResponse = await _client.SearchAsync<AuditEventDTO>(s => s
             .Index("audit-*")
-            .Query(q => q.Term(new TermQuery("id") { Value = id })));
+            .Query(q => q.Term(t => t.Field(f => f.Id).Value(id))));
 
         return searchResponse.Documents.FirstOrDefault();
     }
@@ -103,10 +112,10 @@ public class ElasticsearchService : IElasticsearchService
             .Index("audit-*")
             .Query(q => q.Bool(b => b
                 .Must(
-                    m => m.Term(t => t.Field("entityName").Value(entityName)),
-                    m => m.Term(t => t.Field("entityId").Value(entityId))
+                    m => m.Term(t => t.Field(f => f.EntityName).Value(entityName)),
+                    m => m.Term(t => t.Field(f => f.EntityId).Value(entityId))
                 )))
-            .Sort(sort => sort.Field("timestamp", new FieldSort { Order = SortOrder.Desc })));
+            .Sort(sort => sort.Field(f => f.Timestamp, new FieldSort { Order = SortOrder.Desc })));
 
         return searchResponse.Documents;
     }
@@ -116,8 +125,8 @@ public class ElasticsearchService : IElasticsearchService
     {
         var searchResponse = await _client.SearchAsync<AuditEventDTO>(s => s
             .Index("audit-*")
-            .Query(q => q.Term(new TermQuery("userId") { Value = userId }))
-            .Sort(sort => sort.Field("timestamp", new FieldSort { Order = SortOrder.Desc })));
+            .Query(q => q.Term(t => t.Field(f => f.UserId).Value(userId)))
+            .Sort(sort => sort.Field(f => f.Timestamp, new FieldSort { Order = SortOrder.Desc })));
 
         return searchResponse.Documents;
     }
@@ -128,35 +137,45 @@ public class ElasticsearchService : IElasticsearchService
 
         if (query.StartDate.HasValue || query.EndDate.HasValue)
         {
-            mustClauses.Add(q => q.Range(r => r.DateRange(dr => dr
-                .Field("timestamp")
-                .Gte(query.StartDate)
-                .Lte(query.EndDate))));
+            mustClauses.Add(q => q.Range(r => r.DateRange(dr =>
+            {
+                dr.Field(f => f.Timestamp);
+
+                if (query.StartDate.HasValue)
+                {
+                    dr.Gte(query.StartDate.Value);
+                }
+
+                if (query.EndDate.HasValue)
+                {
+                    dr.Lte(query.EndDate.Value);
+                }
+            })));
         }
 
         if (!string.IsNullOrEmpty(query.Operation))
         {
-            mustClauses.Add(q => q.Term(t => t.Field("operation").Value(query.Operation)));
+            mustClauses.Add(q => q.Term(t => t.Field(f => f.Operation).Value(query.Operation)));
         }
 
         if (!string.IsNullOrEmpty(query.EntityName))
         {
-            mustClauses.Add(q => q.Term(t => t.Field("entityName").Value(query.EntityName)));
+            mustClauses.Add(q => q.Term(t => t.Field(f => f.EntityName).Value(query.EntityName)));
         }
 
         if (!string.IsNullOrEmpty(query.UserId))
         {
-            mustClauses.Add(q => q.Term(t => t.Field("userId").Value(query.UserId)));
+            mustClauses.Add(q => q.Term(t => t.Field(f => f.UserId).Value(query.UserId)));
         }
 
         if (!string.IsNullOrEmpty(query.SourceService))
         {
-            mustClauses.Add(q => q.Term(t => t.Field("sourceService").Value(query.SourceService)));
+            mustClauses.Add(q => q.Term(t => t.Field(f => f.SourceService).Value(query.SourceService)));
         }
 
         if (!string.IsNullOrEmpty(query.CorrelationId))
         {
-            mustClauses.Add(q => q.Term(t => t.Field("correlationId").Value(query.CorrelationId)));
+            mustClauses.Add(q => q.Term(t => t.Field(f => f.CorrelationId).Value(query.CorrelationId)));
         }
 
         return mustClauses;
