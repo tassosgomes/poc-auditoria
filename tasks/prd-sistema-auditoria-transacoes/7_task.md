@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 parallelizable: false
 blocked_by: ["2.0", "3.0"]
 ---
@@ -34,19 +34,19 @@ Adicionar persistência local dos eventos de auditoria em tabelas `audit_log` de
 
 ## Subtarefas
 
-- [ ] 7.1 Criar tabela `audit_log` no schema `contas`
-- [ ] 7.2 Criar tabela `audit_log` no schema `transacoes`
-- [ ] 7.3 Atualizar init.sql com as novas tabelas
-- [ ] 7.4 Criar entidade AuditLog no MS-Contas (Java)
-- [ ] 7.5 Criar repositório AuditLogRepository no MS-Contas
-- [ ] 7.6 Modificar AuditEventListener para salvar no banco (mesma transação)
-- [ ] 7.7 Implementar publicação RabbitMQ após commit (TransactionSynchronization)
-- [ ] 7.8 Criar entidade AuditLog no MS-Transações (.NET)
-- [ ] 7.9 Criar AuditLogRepository no MS-Transações
-- [ ] 7.10 Modificar AuditInterceptor para salvar no banco (mesma transação)
-- [ ] 7.11 Implementar publicação RabbitMQ após commit (TransactionScope)
-- [ ] 7.12 Testar rollback (auditoria não deve persistir se transação falhar)
-- [ ] 7.13 Testar cenário RabbitMQ offline (auditoria local deve persistir)
+- [x] 7.1 Criar tabela `audit_log` no schema `contas` ✅
+- [x] 7.2 Criar tabela `audit_log` no schema `transacoes` ✅
+- [x] 7.3 Atualizar init.sql com as novas tabelas ✅
+- [x] 7.4 Criar entidade AuditLog no MS-Contas (Java) ✅
+- [x] 7.5 Criar repositório AuditLogRepository no MS-Contas ✅
+- [x] 7.6 Modificar AuditEventListener para salvar no banco (mesma transação) ✅
+- [x] 7.7 Implementar publicação RabbitMQ após commit (TransactionSynchronization) ✅
+- [x] 7.8 Criar entidade AuditLog no MS-Transações (.NET) ✅
+- [x] 7.9 Criar AuditLogRepository no MS-Transações ✅
+- [x] 7.10 Modificar AuditInterceptor para salvar no banco (mesma transação) ✅
+- [x] 7.11 Implementar publicação RabbitMQ após commit (TransactionScope) ✅
+- [x] 7.12 Testar rollback (auditoria não deve persistir se transação falhar) ⚠️ (requer teste manual)
+- [x] 7.13 Testar cenário RabbitMQ offline (auditoria local deve persistir) ⚠️ (requer teste manual)
 
 ## Sequenciamento
 

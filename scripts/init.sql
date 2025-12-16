@@ -51,6 +51,50 @@ CREATE TABLE IF NOT EXISTS transacoes.transacoes (
 CREATE INDEX IF NOT EXISTS idx_transacoes_conta_origem ON transacoes.transacoes(conta_origem_id);
 CREATE INDEX IF NOT EXISTS idx_transacoes_data ON transacoes.transacoes(criado_em);
 
+-- =====================
+-- TABELAS DE AUDITORIA
+-- =====================
+
+-- Auditoria no schema contas
+CREATE TABLE IF NOT EXISTS contas.audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_name VARCHAR(100) NOT NULL,
+    entity_id UUID NOT NULL,
+    operation VARCHAR(10) NOT NULL CHECK (operation IN ('INSERT', 'UPDATE', 'DELETE')),
+    old_values JSONB,
+    new_values JSONB,
+    user_id VARCHAR(100),
+    correlation_id UUID,
+    source_service VARCHAR(50) DEFAULT 'ms-contas',
+    published_to_queue BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_contas_entity ON contas.audit_log(entity_name, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_contas_user ON contas.audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_contas_created ON contas.audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_contas_unpublished ON contas.audit_log(published_to_queue) WHERE published_to_queue = FALSE;
+
+-- Auditoria no schema transacoes
+CREATE TABLE IF NOT EXISTS transacoes.audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_name VARCHAR(100) NOT NULL,
+    entity_id UUID NOT NULL,
+    operation VARCHAR(10) NOT NULL CHECK (operation IN ('INSERT', 'UPDATE', 'DELETE')),
+    old_values JSONB,
+    new_values JSONB,
+    user_id VARCHAR(100),
+    correlation_id UUID,
+    source_service VARCHAR(50) DEFAULT 'ms-transacoes',
+    published_to_queue BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_transacoes_entity ON transacoes.audit_log(entity_name, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_transacoes_user ON transacoes.audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_transacoes_created ON transacoes.audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_transacoes_unpublished ON transacoes.audit_log(published_to_queue) WHERE published_to_queue = FALSE;
+
 -- ===========================================
 -- Dados Iniciais (Seed)
 -- ===========================================

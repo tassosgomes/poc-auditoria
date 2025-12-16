@@ -22,9 +22,9 @@ public class AuditIntegrator implements Integrator {
             SessionFactoryServiceRegistry serviceRegistry
     ) {
         EventListenerRegistry registry = serviceRegistry.getService(EventListenerRegistry.class);
-        registry.appendListeners(EventType.PRE_INSERT, auditEventListener);
-        registry.appendListeners(EventType.PRE_UPDATE, auditEventListener);
-        registry.appendListeners(EventType.PRE_DELETE, auditEventListener);
+        registry.appendListeners(EventType.POST_INSERT, auditEventListener);
+        registry.appendListeners(EventType.POST_UPDATE, auditEventListener);
+        registry.appendListeners(EventType.POST_DELETE, auditEventListener);
     }
 
     @Override

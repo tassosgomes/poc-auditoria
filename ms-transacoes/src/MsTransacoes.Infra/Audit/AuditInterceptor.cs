@@ -1,29 +1,33 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using MsTransacoes.Application.DTOs;
 using MsTransacoes.Application.Interfaces;
+using MsTransacoes.Domain.Entities;
+using MsTransacoes.Infra.Persistence;
 
 namespace MsTransacoes.Infra.Audit;
 
 public sealed class AuditInterceptor : SaveChangesInterceptor
 {
-    private readonly IAuditEventPublisher _publisher;
+    private readonly IServiceProvider _serviceProvider;
     private readonly IUserContextAccessor _userContext;
     private readonly ICorrelationIdAccessor _correlationId;
     private readonly ILogger<AuditInterceptor> _logger;
 
-    private readonly ConcurrentDictionary<Guid, List<AuditEventDTO>> _pendingAuditByContextId = new();
+    private readonly ConcurrentDictionary<Guid, List<AuditLog>> _pendingAuditByContextId = new();
 
     public AuditInterceptor(
-        IAuditEventPublisher publisher,
+        IServiceProvider serviceProvider,
         IUserContextAccessor userContext,
         ICorrelationIdAccessor correlationId,
         ILogger<AuditInterceptor> logger)
     {
-        _publisher = publisher;
+        _serviceProvider = serviceProvider;
         _userContext = userContext;
         _correlationId = correlationId;
         _logger = logger;
@@ -40,38 +44,31 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
             return await base.SavingChangesAsync(eventData, result, cancellationToken);
         }
 
-        var auditEntries = new List<AuditEventDTO>();
+        var auditLogs = new List<AuditLog>();
 
         foreach (var entry in context.ChangeTracker.Entries()
                      .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {
-            var auditEvent = new AuditEventDTO
-            {
-                Id = Guid.NewGuid().ToString(),
-                Timestamp = DateTime.UtcNow,
-                Operation = GetOperationName(entry.State),
-                EntityName = entry.Entity.GetType().Name,
-                EntityId = GetPrimaryKeyValue(entry),
-                UserId = _userContext.GetCurrentUserId() ?? "system",
-                OldValues = entry.State != EntityState.Added ? GetValues(entry.OriginalValues) : null,
-                NewValues = entry.State != EntityState.Deleted ? GetValues(entry.CurrentValues) : null,
-                ChangedFields = GetChangedFields(entry),
-                SourceService = "ms-transacoes",
-                CorrelationId = _correlationId.GetCorrelationId()
-            };
+            // Não auditar a própria tabela de auditoria
+            if (entry.Entity is AuditLog)
+                continue;
 
-            auditEntries.Add(auditEvent);
+            var auditLog = CreateAuditLog(entry);
+            auditLogs.Add(auditLog);
+            
+            // Adicionar ao contexto para salvar na MESMA transação
+            context.Set<AuditLog>().Add(auditLog);
         }
 
-        if (auditEntries.Count > 0)
+        if (auditLogs.Count > 0)
         {
-            _pendingAuditByContextId[context.ContextId.InstanceId] = auditEntries;
+            _pendingAuditByContextId[context.ContextId.InstanceId] = auditLogs;
         }
 
         return await base.SavingChangesAsync(eventData, result, cancellationToken);
     }
 
-    public override ValueTask<int> SavedChangesAsync(
+    public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData,
         int result,
         CancellationToken cancellationToken = default)
@@ -79,26 +76,17 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
         var context = eventData.Context;
         if (context is null)
         {
-            return base.SavedChangesAsync(eventData, result, cancellationToken);
+            return await base.SavedChangesAsync(eventData, result, cancellationToken);
         }
 
-        if (_pendingAuditByContextId.TryRemove(context.ContextId.InstanceId, out var auditEntries)
-            && auditEntries.Count > 0)
+        // Após o commit, publicar no RabbitMQ
+        if (_pendingAuditByContextId.TryRemove(context.ContextId.InstanceId, out var auditLogs)
+            && auditLogs.Count > 0)
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _publisher.PublishBatchAsync(auditEntries);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Falha ao publicar eventos de auditoria");
-                }
-            }, CancellationToken.None);
+            _ = Task.Run(async () => await PublishToRabbitMQAsync(auditLogs), CancellationToken.None);
         }
 
-        return base.SavedChangesAsync(eventData, result, cancellationToken);
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
 
     public override Task SaveChangesFailedAsync(
@@ -114,15 +102,82 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
         return base.SaveChangesFailedAsync(eventData, cancellationToken);
     }
 
-    private static string GetOperationName(EntityState state)
+    private AuditLog CreateAuditLog(EntityEntry entry)
     {
-        return state switch
+        var operation = entry.State switch
         {
             EntityState.Added => "INSERT",
             EntityState.Modified => "UPDATE",
             EntityState.Deleted => "DELETE",
             _ => "UNKNOWN"
         };
+
+        var entityId = GetPrimaryKeyValue(entry);
+        
+        return new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            EntityName = entry.Entity.GetType().Name,
+            EntityId = Guid.TryParse(entityId, out var guid) ? guid : Guid.Empty,
+            Operation = operation,
+            OldValues = GetOldValues(entry),
+            NewValues = GetNewValues(entry),
+            UserId = _userContext.GetCurrentUserId() ?? "system",
+            CorrelationId = ParseCorrelationId(_correlationId.GetCorrelationId()),
+            SourceService = "ms-transacoes",
+            PublishedToQueue = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    private async Task PublishToRabbitMQAsync(List<AuditLog> auditLogs)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var publisher = scope.ServiceProvider.GetRequiredService<IAuditEventPublisher>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<TransacoesDbContext>();
+
+            foreach (var auditLog in auditLogs)
+            {
+                try
+                {
+                    var auditEvent = new AuditEventDTO
+                    {
+                        Id = auditLog.Id.ToString(),
+                        Timestamp = auditLog.CreatedAt.UtcDateTime,
+                        Operation = auditLog.Operation,
+                        EntityName = auditLog.EntityName,
+                        EntityId = auditLog.EntityId.ToString(),
+                        UserId = auditLog.UserId,
+                        OldValues = DeserializeJson(auditLog.OldValues),
+                        NewValues = DeserializeJson(auditLog.NewValues),
+                        ChangedFields = ComputeChangedFields(auditLog.OldValues, auditLog.NewValues),
+                        SourceService = auditLog.SourceService,
+                        CorrelationId = auditLog.CorrelationId?.ToString()
+                    };
+
+                    await publisher.PublishAsync(auditEvent);
+                    
+                    // Marcar como publicado
+                    var logEntry = await dbContext.AuditLogs.FindAsync(auditLog.Id);
+                    if (logEntry != null)
+                    {
+                        logEntry.PublishedToQueue = true;
+                        await dbContext.SaveChangesAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log do erro - a auditoria local já está salva
+                    _logger.LogError(ex, "Falha ao publicar no RabbitMQ para auditLog {AuditLogId}", auditLog.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao acessar RabbitMQ");
+        }
     }
 
     private static string GetPrimaryKeyValue(EntityEntry entry)
@@ -131,21 +186,68 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
         return key?.CurrentValue?.ToString() ?? string.Empty;
     }
 
-    private static Dictionary<string, object?> GetValues(PropertyValues values)
+    private static string? GetOldValues(EntityEntry entry)
     {
-        return values.Properties.ToDictionary(p => p.Name, p => values[p]);
+        if (entry.State == EntityState.Added) return null;
+
+        var values = entry.Properties
+            .Where(p => !p.Metadata.IsPrimaryKey())
+            .ToDictionary(p => p.Metadata.Name, p => p.OriginalValue);
+
+        return JsonSerializer.Serialize(values);
     }
 
-    private static List<string> GetChangedFields(EntityEntry entry)
+    private static string? GetNewValues(EntityEntry entry)
     {
-        if (entry.State != EntityState.Modified)
+        if (entry.State == EntityState.Deleted) return null;
+
+        var values = entry.Properties
+            .Where(p => !p.Metadata.IsPrimaryKey())
+            .ToDictionary(p => p.Metadata.Name, p => p.CurrentValue);
+
+        return JsonSerializer.Serialize(values);
+    }
+
+    private static Dictionary<string, object?>? DeserializeJson(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try
         {
-            return [];
+            return JsonSerializer.Deserialize<Dictionary<string, object?>>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static List<string> ComputeChangedFields(string? oldValuesJson, string? newValuesJson)
+    {
+        var oldValues = DeserializeJson(oldValuesJson);
+        var newValues = DeserializeJson(newValuesJson);
+
+        if (oldValues == null || newValues == null)
+            return new List<string>();
+
+        var changed = new List<string>();
+        foreach (var key in newValues.Keys)
+        {
+            if (oldValues.TryGetValue(key, out var oldValue))
+            {
+                var newValue = newValues[key];
+                if (!Equals(oldValue, newValue))
+                {
+                    changed.Add(key);
+                }
+            }
         }
 
-        return entry.Properties
-            .Where(p => p.IsModified)
-            .Select(p => p.Metadata.Name)
-            .ToList();
+        return changed;
+    }
+
+    private static Guid? ParseCorrelationId(string? correlationId)
+    {
+        if (string.IsNullOrEmpty(correlationId)) return null;
+        return Guid.TryParse(correlationId, out var guid) ? guid : null;
     }
 }
