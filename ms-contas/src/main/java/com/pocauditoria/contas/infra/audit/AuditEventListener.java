@@ -27,6 +27,7 @@ import org.hibernate.persister.entity.EntityPersister;
 import org.hibernate.proxy.HibernateProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -39,15 +40,15 @@ public class AuditEventListener implements
 
     private static final Logger logger = LoggerFactory.getLogger(AuditEventListener.class);
 
-    private final AuditLogRepository auditLogRepository;
+    private final ObjectProvider<AuditLogRepository> auditLogRepositoryProvider;
     private final AuditEventPublisher publisher;
     private final ObjectMapper objectMapper;
 
     public AuditEventListener(
-            @org.springframework.context.annotation.Lazy AuditLogRepository auditLogRepository,
+            ObjectProvider<AuditLogRepository> auditLogRepositoryProvider,
             AuditEventPublisher publisher,
             ObjectMapper objectMapper) {
-        this.auditLogRepository = auditLogRepository;
+        this.auditLogRepositoryProvider = auditLogRepositoryProvider;
         this.publisher = publisher;
         this.objectMapper = objectMapper;
     }
@@ -98,7 +99,8 @@ public class AuditEventListener implements
 
     private void saveAndPublishAfterCommit(AuditLog auditLog) {
         // 1. Salvar na mesma transação (síncrono)
-        AuditLog saved = auditLogRepository.save(auditLog);
+        AuditLogRepository repository = auditLogRepositoryProvider.getObject();
+        AuditLog saved = repository.save(auditLog);
 
         // 2. Publicar no RabbitMQ APÓS o commit (assíncrono)
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -108,7 +110,7 @@ public class AuditEventListener implements
                     try {
                         AuditEventDTO auditEvent = toAuditEvent(saved);
                         publisher.publishAsync(auditEvent);
-                        auditLogRepository.markAsPublished(saved.getId());
+                        repository.markAsPublished(saved.getId());
                     } catch (Exception e) {
                         // Log do erro - a auditoria local já está salva
                         // Um job de retry pode republicar depois
