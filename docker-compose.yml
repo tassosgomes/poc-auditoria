@@ -1,19 +1,22 @@
 services:
+  # ====================
+  # INFRAESTRUTURA
+  # ====================
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: poc-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: poc_user
-      POSTGRES_PASSWORD: poc_password
-      POSTGRES_DB: poc_auditoria
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: ${POSTGRES_DB:-poc_auditoria}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U poc_user -d poc_auditoria"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -21,17 +24,19 @@ services:
       - poc-network
 
   rabbitmq:
-    image: rabbitmq:3.12-management
+    image: rabbitmq:3.12-management-alpine
     container_name: poc-rabbitmq
     restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-rabbitmq}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-rabbitmq123}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: rabbitmq-diagnostics -q ping
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,22 +50,26 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=${ES_JAVA_OPTS:--Xms512m -Xmx512m}"
     ports:
       - "9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
-      test: curl -s http://localhost:9200 >/dev/null || exit 1
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - poc-network
 
+  # ====================
+  # MICROSERVIÇOS
+  # ====================
   ms-contas:
     build:
       context: ./ms-contas
+      dockerfile: Dockerfile
     container_name: poc-ms-contas
     restart: unless-stopped
     depends_on:
@@ -69,21 +78,28 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/poc_auditoria?currentSchema=contas
-      DB_USER: poc_user
-      DB_PASSWORD: poc_password
-      RABBIT_HOST: rabbitmq
-      RABBIT_PORT: 5672
-      RABBIT_USER: guest
-      RABBIT_PASSWORD: guest
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-poc_auditoria}?currentSchema=contas
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-rabbitmq}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-rabbitmq123}
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - poc-network
 
   ms-transacoes:
     build:
       context: ./ms-transacoes
+      dockerfile: Dockerfile
     container_name: poc-ms-transacoes
     restart: unless-stopped
     depends_on:
@@ -92,23 +108,29 @@ services:
       rabbitmq:
         condition: service_healthy
       ms-contas:
-        condition: service_started
+        condition: service_healthy
     environment:
-      ConnectionStrings__DefaultConnection: "Host=postgres;Database=poc_auditoria;Username=poc_user;Password=poc_password;SearchPath=transacoes"
+      ASPNETCORE_ENVIRONMENT: Docker
+      ConnectionStrings__DefaultConnection: "Host=postgres;Database=${POSTGRES_DB:-poc_auditoria};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres123};Search Path=transacoes"
       RabbitMQ__Host: rabbitmq
-      RabbitMQ__User: guest
-      RabbitMQ__Password: guest
-      Services__MsContas: http://ms-contas:8080
-      Services__MsContasAuth__User: admin
-      Services__MsContasAuth__Password: admin123
+      RabbitMQ__Username: ${RABBITMQ_USER:-rabbitmq}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq123}
+      ContasApi__BaseUrl: http://ms-contas:8080
     ports:
-      - "5000:5000"
+      - "5000:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - poc-network
 
   ms-auditoria:
     build:
       context: ./ms-auditoria
+      dockerfile: Dockerfile
     container_name: poc-ms-auditoria
     restart: unless-stopped
     depends_on:
@@ -117,29 +139,32 @@ services:
       elasticsearch:
         condition: service_healthy
     environment:
-      Elasticsearch__Url: http://elasticsearch:9200
+      ASPNETCORE_ENVIRONMENT: Docker
       RabbitMQ__Host: rabbitmq
-      RabbitMQ__Port: 5672
-      RabbitMQ__User: guest
-      RabbitMQ__Password: guest
+      RabbitMQ__Username: ${RABBITMQ_USER:-rabbitmq}
+      RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq123}
+      Elasticsearch__Uri: http://elasticsearch:9200
     ports:
-      - "5001:5001"
+      - "5001:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
       - poc-network
 
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile
     container_name: poc-frontend
     restart: unless-stopped
     depends_on:
       - ms-contas
       - ms-transacoes
       - ms-auditoria
-    environment:
-      VITE_API_CONTAS: http://localhost:8080
-      VITE_API_TRANSACOES: http://localhost:5000
-      VITE_API_AUDITORIA: http://localhost:5001
     ports:
       - "3000:3000"
     networks:
@@ -151,4 +176,5 @@ networks:
 
 volumes:
   postgres_data:
+  rabbitmq_data:
   elasticsearch_data:
