@@ -44,7 +44,7 @@ public class AuditEventListener implements
     private final ObjectMapper objectMapper;
 
     public AuditEventListener(
-            AuditLogRepository auditLogRepository,
+            @org.springframework.context.annotation.Lazy AuditLogRepository auditLogRepository,
             AuditEventPublisher publisher,
             ObjectMapper objectMapper) {
         this.auditLogRepository = auditLogRepository;
