@@ -115,7 +115,7 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-rabbitmq}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq123}
-      ContasApi__BaseUrl: http://ms-contas:8080
+      Services__MsContas: http://ms-contas:8080
     ports:
       - "5000:8080"
     healthcheck:
@@ -141,9 +141,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       RabbitMQ__Host: rabbitmq
-      RabbitMQ__Username: ${RABBITMQ_USER:-rabbitmq}
+      RabbitMQ__User: ${RABBITMQ_USER:-rabbitmq}
       RabbitMQ__Password: ${RABBITMQ_PASSWORD:-rabbitmq123}
-      Elasticsearch__Uri: http://elasticsearch:9200
+      RabbitMQ__Port: 5672
+      Elasticsearch__Url: http://elasticsearch:9200
     ports:
       - "5001:8080"
     healthcheck:

@@ -10,6 +10,7 @@ public sealed class TransacoesDbContext : DbContext
     }
 
     public DbSet<Transacao> Transacoes => Set<Transacao>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

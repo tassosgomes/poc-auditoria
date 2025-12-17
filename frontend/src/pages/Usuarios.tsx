@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usuariosService } from '../services/contasApi';
-import type { Usuario } from '../types';
+import type { Usuario, UsuarioCreateRequest, UsuarioUpdateRequest } from '../types';
 
 export function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -10,8 +10,9 @@ export function Usuarios() {
   const [mensagem, setMensagem] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
   
   const [form, setForm] = useState({
-    username: '',
+    nome: '',
     email: '',
+    senha: '',
   });
 
   useEffect(() => {
@@ -35,12 +36,13 @@ export function Usuarios() {
     if (usuario) {
       setEditingId(usuario.id);
       setForm({
-        username: usuario.username,
-        email: usuario.email || '',
+        nome: usuario.nome,
+        email: usuario.email,
+        senha: '', // senha não é retornada nem editável
       });
     } else {
       setEditingId(null);
-      setForm({ username: '', email: '' });
+      setForm({ nome: '', email: '', senha: '' });
     }
     setShowModal(true);
     setMensagem(null);
@@ -49,7 +51,7 @@ export function Usuarios() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingId(null);
-    setForm({ username: '', email: '' });
+    setForm({ nome: '', email: '', senha: '' });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,10 +61,19 @@ export function Usuarios() {
 
     try {
       if (editingId) {
-        await usuariosService.atualizar(editingId, form);
+        const updateData: UsuarioUpdateRequest = {
+          nome: form.nome,
+          email: form.email,
+        };
+        await usuariosService.atualizar(editingId, updateData);
         setMensagem({ tipo: 'success', texto: 'Usuário atualizado com sucesso!' });
       } else {
-        await usuariosService.criar(form);
+        const createData: UsuarioCreateRequest = {
+          nome: form.nome,
+          email: form.email,
+          senha: form.senha,
+        };
+        await usuariosService.criar(createData);
         setMensagem({ tipo: 'success', texto: 'Usuário criado com sucesso!' });
       }
       handleCloseModal();
@@ -127,7 +138,7 @@ export function Usuarios() {
                   ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Username
+                  Nome
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   E-mail
@@ -144,10 +155,10 @@ export function Usuarios() {
                     {usuario.id.substring(0, 8)}...
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {usuario.username}
+                    {usuario.nome}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {usuario.email || '-'}
+                    {usuario.email}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
@@ -180,11 +191,11 @@ export function Usuarios() {
             
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Username</label>
+                <label className="block text-sm font-medium mb-1">Nome</label>
                 <input
                   type="text"
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  value={form.nome}
+                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
                   className="w-full border rounded-lg p-2"
                   required
                 />
@@ -197,8 +208,23 @@ export function Usuarios() {
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   className="w-full border rounded-lg p-2"
+                  required
                 />
               </div>
+
+              {!editingId && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Senha</label>
+                  <input
+                    type="password"
+                    value={form.senha}
+                    onChange={(e) => setForm({ ...form, senha: e.target.value })}
+                    className="w-full border rounded-lg p-2"
+                    required
+                    minLength={3}
+                  />
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3">
                 <button

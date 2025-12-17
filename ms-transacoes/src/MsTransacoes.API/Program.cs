@@ -20,6 +20,18 @@ using MsTransacoes.Infra.Persistence.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// CORS Configuration
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
+
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
@@ -101,6 +113,8 @@ builder.Services.AddHealthChecks()
         name: "rabbitmq");
 
 var app = builder.Build();
+
+app.UseCors("AllowFrontend");
 
 app.UseExceptionHandler(errorApp =>
 {

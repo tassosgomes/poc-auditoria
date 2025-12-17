@@ -13,6 +13,6 @@ RUN dotnet publish "MsTransacoes.API/MsTransacoes.API.csproj" -c Release -o /app
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 WORKDIR /app
 COPY --from=build /app .
-EXPOSE 5000
-ENV ASPNETCORE_URLS=http://+:5000
+EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
 ENTRYPOINT ["dotnet", "MsTransacoes.API.dll"]

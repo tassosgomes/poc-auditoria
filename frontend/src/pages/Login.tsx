@@ -21,23 +21,49 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-        <h1 className="text-xl font-bold mb-6">Login</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="min-h-screen flex items-center justify-center bg-black">
+      <div className="w-full max-w-md px-6">
+        <div className="mb-12">
+          <h1 className="text-4xl font-bold text-white mb-2">POC Auditoria</h1>
+          <p className="text-gray-400 text-lg">Entre com suas credenciais</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-1">Usuário</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full border p-2 rounded" />
+            <input 
+              value={username} 
+              onChange={(e) => setUsername(e.target.value)} 
+              placeholder="Usuário"
+              className="w-full bg-white/5 border border-gray-700 text-white placeholder-gray-500 px-4 py-4 rounded-lg focus:outline-none focus:border-white focus:bg-white/10 transition-all" 
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Senha</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border p-2 rounded" />
+            <input 
+              type="password" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              placeholder="Senha"
+              className="w-full bg-white/5 border border-gray-700 text-white placeholder-gray-500 px-4 py-4 rounded-lg focus:outline-none focus:border-white focus:bg-white/10 transition-all" 
+            />
           </div>
 
-          {error && <div className="text-red-600">{error}</div>}
+          {error && (
+            <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 px-4 py-3 rounded-lg">
+              {error}
+            </div>
+          )}
 
-          <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded">Entrar</button>
+          <button 
+            type="submit" 
+            className="w-full bg-white text-black font-semibold py-4 rounded-lg hover:bg-gray-200 transition-all transform active:scale-98"
+          >
+            Entrar
+          </button>
         </form>
+
+        <div className="mt-8 text-center">
+          <p className="text-gray-600 text-sm">Sistema de Auditoria de Transações</p>
+        </div>
       </div>
     </div>
   );

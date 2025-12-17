@@ -1,7 +1,21 @@
 export interface Usuario {
   id: string;
-  username: string;
-  email?: string;
+  nome: string;
+  email: string;
+  ativo: boolean;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
+export interface UsuarioCreateRequest {
+  nome: string;
+  email: string;
+  senha: string;
+}
+
+export interface UsuarioUpdateRequest {
+  nome: string;
+  email: string;
 }
 
 export interface Conta {
