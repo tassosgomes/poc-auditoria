@@ -46,13 +46,14 @@ public sealed class AuditInterceptor : SaveChangesInterceptor
 
         var auditLogs = new List<AuditLog>();
 
-        foreach (var entry in context.ChangeTracker.Entries()
-                     .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
-        {
-            // Não auditar a própria tabela de auditoria
-            if (entry.Entity is AuditLog)
-                continue;
+        // Capturar as entries antes de iterar para evitar "Collection was modified"
+        var entriesToAudit = context.ChangeTracker.Entries()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Where(e => e.Entity is not AuditLog)
+            .ToList();
 
+        foreach (var entry in entriesToAudit)
+        {
             var auditLog = CreateAuditLog(entry);
             auditLogs.Add(auditLog);
             

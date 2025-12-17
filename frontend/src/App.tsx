@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import { Login } from './pages/Login';
@@ -11,34 +11,40 @@ import { Auditoria } from './pages/Auditoria';
 function App() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isLoginPage = location.pathname === '/login';
 
   const handleLogout = () => {
     auth.logout();
     navigate('/login');
   };
 
+  if (isLoginPage) {
+    return <Login />;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-6">
-            <Link to="/" className="font-bold text-lg">POC Auditoria</Link>
+    <div className="min-h-screen bg-white">
+      <header className="bg-black border-b border-gray-900">
+        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-8">
+            <Link to="/" className="font-bold text-xl text-white">POC Auditoria</Link>
             {auth.isAuthenticated && (
               <>
-                <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">Dashboard</Link>
-                <Link to="/usuarios" className="text-sm text-gray-600 hover:text-gray-900">Usuários</Link>
-                <Link to="/contas" className="text-sm text-gray-600 hover:text-gray-900">Contas</Link>
-                <Link to="/transacoes" className="text-sm text-gray-600 hover:text-gray-900">Transações</Link>
-                <Link to="/auditoria" className="text-sm text-gray-600 hover:text-gray-900">Auditoria</Link>
+                <Link to="/" className="text-sm text-gray-400 hover:text-white transition-colors">Dashboard</Link>
+                <Link to="/usuarios" className="text-sm text-gray-400 hover:text-white transition-colors">Usuários</Link>
+                <Link to="/contas" className="text-sm text-gray-400 hover:text-white transition-colors">Contas</Link>
+                <Link to="/transacoes" className="text-sm text-gray-400 hover:text-white transition-colors">Transações</Link>
+                <Link to="/auditoria" className="text-sm text-gray-400 hover:text-white transition-colors">Auditoria</Link>
               </>
             )}
           </div>
           {auth.isAuthenticated && (
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Olá, {auth.user?.username}</span>
+            <div className="flex items-center space-x-6">
+              <span className="text-sm text-gray-400">Olá, {auth.user?.username}</span>
               <button
                 onClick={handleLogout}
-                className="text-sm text-gray-600 hover:text-gray-900"
+                className="text-sm text-gray-400 hover:text-white bg-white/5 px-4 py-2 rounded-lg transition-colors"
               >
                 Sair
               </button>
@@ -47,9 +53,8 @@ function App() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-6 py-8">
         <Routes>
-          <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute><Usuarios /></ProtectedRoute>} />
           <Route path="/contas" element={<ProtectedRoute><Contas /></ProtectedRoute>} />

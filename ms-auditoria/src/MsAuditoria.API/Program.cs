@@ -7,6 +7,18 @@ using MsAuditoria.Infra.Messaging;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// CORS Configuration
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
+
 // Controllers
 builder.Services.AddControllers();
 
@@ -58,6 +70,8 @@ builder.Services.AddHostedService<AuditEventConsumer>();
 builder.Services.AddHostedService<IndexInitializer>();
 
 var app = builder.Build();
+
+app.UseCors("AllowFrontend");
 
 // Swagger sempre habilitado (POC)
 app.UseSwagger();

@@ -25,6 +25,13 @@ public sealed class SimpleAuthMiddleware
 
     public async Task InvokeAsync(HttpContext context, IUserContextAccessor userContext)
     {
+        // Permitir preflight CORS (OPTIONS) sem autenticação
+        if (context.Request.Method == "OPTIONS")
+        {
+            await _next(context);
+            return;
+        }
+        
         if (PublicPrefixes.Any(prefix => context.Request.Path.StartsWithSegments(prefix)))
         {
             await _next(context);

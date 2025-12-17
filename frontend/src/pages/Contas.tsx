@@ -14,6 +14,7 @@ export function Contas() {
     numeroConta: '',
     saldo: '',
     usuarioId: '',
+    tipo: 'CORRENTE',
   });
 
   useEffect(() => {
@@ -44,10 +45,11 @@ export function Contas() {
         numeroConta: conta.numeroConta,
         saldo: conta.saldo.toString(),
         usuarioId: (conta as any).usuarioId || '',
+        tipo: (conta as any).tipo || 'CORRENTE',
       });
     } else {
       setEditingId(null);
-      setForm({ numeroConta: '', saldo: '0', usuarioId: '' });
+      setForm({ numeroConta: '', saldo: '0', usuarioId: '', tipo: 'CORRENTE' });
     }
     setShowModal(true);
     setMensagem(null);
@@ -56,7 +58,7 @@ export function Contas() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingId(null);
-    setForm({ numeroConta: '', saldo: '0', usuarioId: '' });
+    setForm({ numeroConta: '', saldo: '0', usuarioId: '', tipo: 'CORRENTE' });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,6 +71,7 @@ export function Contas() {
         numeroConta: form.numeroConta,
         saldo: parseFloat(form.saldo),
         usuarioId: form.usuarioId,
+        tipo: form.tipo,
       };
 
       if (editingId) {
@@ -229,6 +232,19 @@ export function Contas() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium mb-1">Tipo de Conta</label>
+                <select
+                  value={form.tipo}
+                  onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+                  className="w-full border rounded-lg p-2"
+                  required
+                >
+                  <option value="CORRENTE">Conta Corrente</option>
+                  <option value="POUPANCA">Conta Poupança</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium mb-1">Usuário</label>
                 <select
                   value={form.usuarioId}
@@ -239,7 +255,7 @@ export function Contas() {
                   <option value="">Selecione um usuário...</option>
                   {usuarios.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.username}
+                      {u.nome} - {u.email}
                     </option>
                   ))}
                 </select>

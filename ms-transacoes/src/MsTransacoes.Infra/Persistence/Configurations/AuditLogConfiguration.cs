@@ -12,12 +12,22 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         
         builder.HasKey(x => x.Id);
         
+        builder.Property(x => x.Id)
+            .HasColumnName("id");
+        
         builder.Property(x => x.EntityName)
             .HasMaxLength(100)
+            .HasColumnName("entity_name")
             .IsRequired();
+        
+        builder.Property(x => x.EntityId)
+            .HasColumnName("entity_id");
+        builder.Property(x => x.EntityId)
+            .HasColumnName("entity_id");
         
         builder.Property(x => x.Operation)
             .HasMaxLength(10)
+            .HasColumnName("operation")
             .IsRequired();
         
         builder.Property(x => x.OldValues)

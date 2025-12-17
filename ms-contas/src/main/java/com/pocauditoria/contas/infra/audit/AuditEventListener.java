@@ -28,6 +28,8 @@ import org.hibernate.proxy.HibernateProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import com.pocauditoria.contas.application.service.AuditService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -41,16 +43,22 @@ public class AuditEventListener implements
     private static final Logger logger = LoggerFactory.getLogger(AuditEventListener.class);
 
     private final ObjectProvider<AuditLogRepository> auditLogRepositoryProvider;
+    private final ObjectProvider<AuditService> auditServiceProvider;
     private final AuditEventPublisher publisher;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     public AuditEventListener(
             ObjectProvider<AuditLogRepository> auditLogRepositoryProvider,
+            ObjectProvider<AuditService> auditServiceProvider,
             AuditEventPublisher publisher,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            JdbcTemplate jdbcTemplate) {
         this.auditLogRepositoryProvider = auditLogRepositoryProvider;
+        this.auditServiceProvider = auditServiceProvider;
         this.publisher = publisher;
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -98,22 +106,31 @@ public class AuditEventListener implements
     }
 
     private void saveAndPublishAfterCommit(AuditLog auditLog) {
-        // 1. Salvar na mesma transação (síncrono)
-        AuditLogRepository repository = auditLogRepositoryProvider.getObject();
-        AuditLog saved = repository.save(auditLog);
+        // 1. Salvar em NOVA transação via JDBC para evitar ConcurrentModificationException
+        try {
+            if (auditLog.getId() == null) {
+                auditLog.setId(UUID.randomUUID());
+            }
+            AuditService auditService = auditServiceProvider.getObject();
+            auditService.saveInNewTransaction(auditLog);
+        } catch (Exception e) {
+            logger.error("Erro ao salvar log de auditoria", e);
+            throw e; 
+        }
 
-        // 2. Publicar no RabbitMQ APÓS o commit (assíncrono)
+        // 2. Publicar no RabbitMQ APÓS o commit da transação PRINCIPAL
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
                     try {
-                        AuditEventDTO auditEvent = toAuditEvent(saved);
+                        AuditEventDTO auditEvent = toAuditEvent(auditLog);
                         publisher.publishAsync(auditEvent);
-                        repository.markAsPublished(saved.getId());
+                        
+                        // Marcar como publicado via JDBC direto (nova transação implícita)
+                        jdbcTemplate.update("UPDATE contas.audit_log SET published_to_queue = true WHERE id = ?", auditLog.getId());
+                        
                     } catch (Exception e) {
-                        // Log do erro - a auditoria local já está salva
-                        // Um job de retry pode republicar depois
                         logger.error("Falha ao publicar no RabbitMQ: " + e.getMessage(), e);
                     }
                 }

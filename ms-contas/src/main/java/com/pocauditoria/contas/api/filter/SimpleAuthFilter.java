@@ -30,6 +30,14 @@ public class SimpleAuthFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String path = request.getRequestURI();
+        String method = request.getMethod();
+        
+        // Permitir preflight CORS (OPTIONS) sem autenticação
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        
         if (path.contains("/swagger")
                 || path.contains("/v3/api-docs")
                 || path.contains("/health")) {
